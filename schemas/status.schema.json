@@ -1,0 +1,153 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "SoundMind v1 Status",
+    "type": "object",
+    "required": [
+        "job_id",
+        "created_at",
+        "input",
+        "stages"
+    ],
+    "properties": {
+        "job_id": {
+            "type": "string",
+            "description": "Unique job identifier (UUID or equivalent)"
+        },
+        "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Job creation timestamp (ISO-8601)"
+        },
+        "input": {
+            "type": "object",
+            "required": [
+                "original_wav",
+                "sha256"
+            ],
+            "properties": {
+                "original_wav": {
+                    "type": "string",
+                    "description": "Path or URL to canonical original.wav"
+                },
+                "sha256": {
+                    "type": "string",
+                    "description": "SHA-256 hash of canonical input audio"
+                }
+            },
+            "additionalProperties": false
+        },
+        "stages": {
+            "type": "object",
+            "required": [
+                "separation",
+                "diarization",
+                "events"
+            ],
+            "properties": {
+                "separation": {
+                    "type": [
+                        "object",
+                        "null"
+                    ],
+                    "properties": {
+                        "speech_wav": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "residual_wav": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "metrics": {
+                            "$ref": "#/definitions/sqi"
+                        }
+                    },
+                    "additionalProperties": false
+                },
+                "diarization": {
+                    "type": [
+                        "object",
+                        "null"
+                    ],
+                    "properties": {
+                        "diarization_json": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "rttm": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "per_speaker": {
+                            "type": [
+                                "object",
+                                "null"
+                            ],
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        },
+                        "metrics": {
+                            "$ref": "#/definitions/sqi"
+                        }
+                    },
+                    "additionalProperties": false
+                },
+                "events": {
+                    "type": [
+                        "object",
+                        "null"
+                    ],
+                    "properties": {
+                        "events_json": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": false
+        }
+    },
+    "definitions": {
+        "sqi": {
+            "type": [
+                "object",
+                "null"
+            ],
+            "properties": {
+                "snr_proxy_db": {
+                    "type": "number"
+                },
+                "clipping_pct": {
+                    "type": "number"
+                },
+                "dropout_pct": {
+                    "type": "number"
+                },
+                "reverb_proxy_rt60_ms": {
+                    "type": "number"
+                },
+                "loudness_lufs": {
+                    "type": "number"
+                },
+                "rms_dbfs": {
+                    "type": "number"
+                }
+            },
+            "additionalProperties": false
+        }
+    },
+    "additionalProperties": false
+}

@@ -1,0 +1,56 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "SoundMind v1 Diarization",
+    "type": "object",
+    "required": [
+        "sample_rate",
+        "speakers"
+    ],
+    "properties": {
+        "sample_rate": {
+            "type": "integer",
+            "description": "Sample rate of diarized audio"
+        },
+        "speakers": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "speaker_id",
+                    "segments"
+                ],
+                "properties": {
+                    "speaker_id": {
+                        "type": "string",
+                        "description": "Stable speaker identifier"
+                    },
+                    "segments": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": [
+                                "start_s",
+                                "end_s"
+                            ],
+                            "properties": {
+                                "start_s": {
+                                    "type": "number"
+                                },
+                                "end_s": {
+                                    "type": "number"
+                                }
+                            },
+                            "additionalProperties": false
+                        }
+                    }
+                },
+                "additionalProperties": false
+            }
+        },
+        "notes": {
+            "type": "string",
+            "description": "Optional explanatory notes"
+        }
+    },
+    "additionalProperties": false
+}

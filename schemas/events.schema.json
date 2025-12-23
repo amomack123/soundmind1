@@ -1,0 +1,45 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "SoundMind v1 Acoustic Event Candidates",
+    "type": "object",
+    "required": [
+        "events"
+    ],
+    "properties": {
+        "events": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "type",
+                    "start_s",
+                    "end_s",
+                    "confidence"
+                ],
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "impulsive_sound",
+                            "tonal_alarm_like",
+                            "vehicle_like"
+                        ]
+                    },
+                    "start_s": {
+                        "type": "number"
+                    },
+                    "end_s": {
+                        "type": "number"
+                    },
+                    "confidence": {
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 1.0
+                    }
+                },
+                "additionalProperties": false
+            }
+        }
+    },
+    "additionalProperties": false
+}
