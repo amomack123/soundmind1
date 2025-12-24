@@ -5,16 +5,52 @@ Responsibilities:
 - StageFailure exception for pipeline control flow
 - Error object builder per contract
 - Stage status.json writer
+- ArtifactRef dataclass for immutable artifact references
 
 Invariants:
 - Stages always write status.json before raising StageFailure
 - Timestamps use PST offset from utils.now_iso()
+- ArtifactRef shape is FROZEN: path, type, role, description
 """
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from soundmind.utils import now_iso
+
+
+# =============================================================================
+# ArtifactRef — Frozen Artifact Reference (Commit 5)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class ArtifactRef:
+    """
+    Immutable reference to a pipeline artifact.
+    
+    Attributes:
+        path: Relative path from job root (e.g., "separation/stems/speech.wav")
+        type: MIME type (e.g., "audio/wav", "application/json")
+        role: Artifact role with prefix (e.g., "audio/speech", "metadata/sqi")
+        description: Human-readable description
+    
+    Shape is FROZEN. No additional fields.
+    """
+    path: str
+    type: str
+    role: str
+    description: str
+    
+    def to_dict(self) -> dict:
+        """Serialize to dictionary for JSON output."""
+        return {
+            "path": self.path,
+            "type": self.type,
+            "role": self.role,
+            "description": self.description,
+        }
 
 
 class StageFailure(Exception):
@@ -81,15 +117,24 @@ def write_stage_status(
         stage: Stage name
         success: Whether stage succeeded
         started_at: ISO-8601 timestamp when stage started
-        artifacts: List of artifact paths (default: [])
+        artifacts: List of ArtifactRef or dicts (default: [])
         errors: List of error objects (default: [])
     
     Note:
         Uses None defaults to avoid mutable default argument issues.
+        Commit 5: Handles both ArtifactRef dataclasses and dicts.
     """
     # Fixed mutable defaults
     artifacts = [] if artifacts is None else artifacts
     errors = [] if errors is None else errors
+    
+    # Convert ArtifactRef to dict if needed (Commit 5)
+    serialized_artifacts = []
+    for a in artifacts:
+        if isinstance(a, ArtifactRef):
+            serialized_artifacts.append(a.to_dict())
+        else:
+            serialized_artifacts.append(a)
     
     status = {
         "job_id": job_id,
@@ -98,7 +143,69 @@ def write_stage_status(
         "started_at": started_at,
         "completed_at": now_iso(),
         "success": success,
-        "artifacts": artifacts,
+        "artifacts": serialized_artifacts,
+        "errors": errors,
+    }
+    
+    status_path = stage_dir / "status.json"
+    status_path.write_text(json.dumps(status, indent=2, sort_keys=True) + "\n")
+
+
+def write_stage_status_v2(
+    stage_dir: Path,
+    stage_name: str,
+    stage_version: str,
+    start_time: str,
+    input_artifacts: list[ArtifactRef],
+    output_artifacts: list[ArtifactRef],
+    success: bool = True,
+    errors: list | None = None,
+    assumptions: dict | None = None,
+    metrics: dict | None = None,
+) -> None:
+    """
+    Write enhanced stage status.json (Commit 5 format).
+    
+    Args:
+        stage_dir: Path to stage directory
+        stage_name: Stage identifier (from contract.name)
+        stage_version: Stage version (from contract.version)
+        start_time: ISO-8601 timestamp when stage started
+        input_artifacts: Artifacts consumed by this stage
+        output_artifacts: Artifacts produced by this stage
+        success: Whether stage succeeded (default True)
+        errors: List of error objects (default [])
+        assumptions: Dict of assumptions made (default {})
+        metrics: Dict of computed metrics (default {})
+    
+    Note:
+        Deterministic ordering: lists sorted, keys sorted.
+        This replaces the Commit 4 status format for new stages.
+    """
+    errors = [] if errors is None else errors
+    assumptions = {} if assumptions is None else assumptions
+    metrics = {} if metrics is None else metrics
+    
+    # Serialize artifacts to dicts (sorted by path for determinism)
+    input_refs = sorted(
+        [a.to_dict() for a in input_artifacts],
+        key=lambda x: x["path"]
+    )
+    output_refs = sorted(
+        [a.to_dict() for a in output_artifacts],
+        key=lambda x: x["path"]
+    )
+    
+    status = {
+        "stage_name": stage_name,
+        "stage_version": stage_version,
+        "start_time": start_time,
+        "end_time": now_iso(),
+        "success": success,
+        "input_artifacts": input_refs,
+        "output_artifacts": output_refs,
+        "assumptions": assumptions,
+        "metrics": metrics,
         "errors": errors,
     }
     
@@ -174,26 +281,28 @@ def build_artifact_ref(
     artifact_type: str,
     role: str,
     description: str,
-) -> dict:
+) -> ArtifactRef:
     """
     Build a standardized artifact reference.
     
     Args:
         path: Relative path from job root (e.g., "separation/stems/speech.wav")
         artifact_type: MIME type (e.g., "audio/wav", "application/json")
-        role: Artifact role (e.g., "speech", "residual", "diarization")
+        role: Artifact role with prefix (e.g., "audio/speech", "metadata/sqi")
         description: Human-readable description
     
     Returns:
-        Frozen ArtifactRef dict with exactly four fields:
-        {path, type, role, description}
+        Frozen ArtifactRef dataclass with exactly four fields:
+        path, type, role, description
     
     Note:
-        This shape is FROZEN. No additional fields in Commit 4.
+        This shape is FROZEN. No additional fields.
+        Commit 5: Now returns ArtifactRef dataclass instead of dict.
     """
-    return {
-        "path": path,
-        "type": artifact_type,
-        "role": role,
-        "description": description,
-    }
+    return ArtifactRef(
+        path=path,
+        type=artifact_type,
+        role=role,
+        description=description,
+    )
+

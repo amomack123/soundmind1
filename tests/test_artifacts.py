@@ -102,11 +102,13 @@ class TestStubContent:
 class TestArtifactRefs:
     """Verify artifacts[] in stage status.json."""
 
-    def test_ingest_has_no_artifacts(self, pipeline_result):
-        """Ingest produces no artifacts (validation only)."""
+    def test_ingest_produces_audio_original(self, pipeline_result):
+        """Ingest produces audio/original artifact (Commit 5)."""
         job_dir = pipeline_result["job_dir"]
         status = json.loads((job_dir / "ingest" / "status.json").read_text())
-        assert status["artifacts"] == []
+        assert len(status["artifacts"]) == 1
+        assert status["artifacts"][0]["role"] == "audio/original"
+        assert status["artifacts"][0]["path"] == "input/original.wav"
 
     def test_separation_has_two_artifacts(self, pipeline_result):
         """Separation produces speech and residual artifact refs."""
@@ -135,8 +137,8 @@ class TestRollupAggregation:
         job_dir = pipeline_result["job_dir"]
         status = json.loads((job_dir / "rollup" / "status.json").read_text())
         
-        # Should have 5 artifacts: 2 from separation, 1 from sqi, 1 from diarization, 1 from events
-        assert len(status["artifacts"]) == 5
+        # Should have 6 artifacts: 1 from ingest, 2 from separation, 1 from sqi, 1 from diarization, 1 from events
+        assert len(status["artifacts"]) == 6
 
     def test_rollup_preserves_stage_order(self, pipeline_result):
         """Rollup artifacts are in stage order."""
@@ -145,12 +147,13 @@ class TestRollupAggregation:
         
         paths = [a["path"] for a in status["artifacts"]]
         
-        # Order should be: separation, sqi, diarization, events
-        assert paths[0].startswith("separation/")
+        # Order should be: ingest, separation, sqi, diarization, events (Commit 5)
+        assert paths[0].startswith("input/")
         assert paths[1].startswith("separation/")
-        assert paths[2].startswith("sqi/")
-        assert paths[3].startswith("diarization/")
-        assert paths[4].startswith("events/")
+        assert paths[2].startswith("separation/")
+        assert paths[3].startswith("sqi/")
+        assert paths[4].startswith("diarization/")
+        assert paths[5].startswith("events/")
 
 
 class TestJobLevelArtifacts:
@@ -162,7 +165,7 @@ class TestJobLevelArtifacts:
         status = json.loads((job_dir / "status.json").read_text())
         
         assert "artifacts" in status
-        assert len(status["artifacts"]) == 5
+        assert len(status["artifacts"]) == 6  # Commit 5: includes ingest's audio/original
 
     def test_job_artifacts_match_rollup(self, pipeline_result):
         """Job-level artifacts match rollup artifacts."""
