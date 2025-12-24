@@ -1,9 +1,5 @@
 """
-SoundMind v1 Pipeline Orchestrator (STUB)
-
-This module documents the fixed stage order and invariants
-for the SoundMind v1 pipeline. It intentionally contains
-no executable orchestration logic in Commit 1.
+SoundMind v1 Pipeline Orchestrator
 
 PIPELINE STAGES (FIXED ORDER — DO NOT MODIFY):
 
@@ -16,9 +12,10 @@ PIPELINE STAGES (FIXED ORDER — DO NOT MODIFY):
 
 INVARIANTS:
     - Stages execute in order A → F
-    - Event candidates (E) only run inside non_speech segments
+    - Stages never call each other (only orchestrator sequences)
+    - Each stage exposes exactly one entrypoint: run(ctx) -> ctx
+    - Pipeline stops on first stage failure
     - Same input + same version = identical output
-    - All timestamps are seconds (float)
 
 SCHEMAS (FROZEN):
     - schemas/status.schema.json
@@ -26,5 +23,70 @@ SCHEMAS (FROZEN):
     - schemas/events.schema.json
 """
 
-# No implementation in Commit 1.
-# This file exists to document the pipeline contract.
+import importlib
+
+from soundmind.context import JobContext
+from soundmind.stages.base import StageFailure
+from soundmind.utils import now_iso, serialize_json
+
+
+# Stage registry: (name, module_path)
+# Uses dynamic imports for future extensibility (plugins, cloud workers)
+STAGE_ORDER = [
+    ("ingest", "soundmind.stages.ingest"),
+    ("separation", "soundmind.stages.separation"),
+    ("sqi", "soundmind.stages.sqi"),
+    ("diarization", "soundmind.stages.diarization"),
+    ("events", "soundmind.stages.events"),
+    ("rollup", "soundmind.stages.rollup"),
+]
+
+
+def run_pipeline(ctx: JobContext) -> bool:
+    """
+    Execute all stages A → F in order.
+    
+    Args:
+        ctx: JobContext with all paths configured.
+    
+    Returns:
+        True if all stages succeeded, False otherwise.
+    
+    Note:
+        Overwrites the initialized job-level status.json from Commit 2.5.
+    """
+    started_at = now_iso()
+    failed_stage = None
+    pipeline_errors: list[dict] = []
+    
+    for stage_name, module_path in STAGE_ORDER:
+        try:
+            module = importlib.import_module(module_path)
+            ctx = module.run(ctx)
+        except StageFailure as e:
+            failed_stage = e.stage
+            pipeline_errors = e.errors
+            break
+    
+    completed_at = now_iso()
+    success = failed_stage is None
+    
+    # Build job-level status.json (overwrites "initialized" state)
+    job_status = {
+        "job_id": ctx.job_id,
+        "version": "v1",
+        "started_at": started_at,
+        "completed_at": completed_at,
+        "success": success,
+        "failed_stage": failed_stage,
+        "stages": {
+            name: f"{name}/status.json"
+            for name, _ in STAGE_ORDER
+            if (ctx.stage_dirs[name] / "status.json").exists()
+        },
+        "errors": pipeline_errors,
+    }
+    
+    (ctx.job_dir / "status.json").write_text(serialize_json(job_status))
+    
+    return success

@@ -153,8 +153,30 @@ def cmd_run(args: argparse.Namespace) -> int:
     status_path = paths["job_dir"] / "status.json"
     status_path.write_text(serialize_json(job_status))
     
-    print(f"Created job workspace: {job_dir}")
-    return 0
+    # Build JobContext and run pipeline
+    from soundmind.context import JobContext
+    from soundmind.pipeline import run_pipeline
+    from soundmind.jobs import STAGE_NAMES
+    
+    ctx = JobContext(
+        job_id=job_id,
+        job_dir=paths["job_dir"],
+        meta_dir=paths["meta_dir"],
+        input_wav_path=paths["input_dir"] / "original.wav",
+        input_json_path=paths["input_dir"] / "input.json",
+        stage_dirs={name: paths["job_dir"] / name for name in STAGE_NAMES},
+        run_config={},
+    )
+    
+    # Run pipeline (overwrites initialized status.json)
+    success = run_pipeline(ctx)
+    
+    if success:
+        print(f"Pipeline completed successfully: {job_dir}")
+        return 0
+    else:
+        print(f"Pipeline failed: {job_dir}", file=sys.stderr)
+        return 1
 
 
 def main() -> None:

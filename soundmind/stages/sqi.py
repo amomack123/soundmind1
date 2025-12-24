@@ -1,5 +1,5 @@
 """
-Stage C: Signal Quality Indicators (STUB)
+Stage C: Signal Quality Indicators
 
 Responsibilities:
     - Compute signal quality metrics for audio tracks
@@ -15,5 +15,16 @@ Invariants:
     - Metrics are objective, non-semantic
     - Same input + same version = identical metrics
 
-No implementation in Commit 1.
+Commit 3: No-op stub, writes status.json (no DSP).
 """
+
+from soundmind.context import JobContext
+from soundmind.stages.base import write_stage_status
+from soundmind.utils import now_iso
+
+
+def run(ctx: JobContext) -> JobContext:
+    """Stage C: No-op SQI stub."""
+    started_at = now_iso()
+    write_stage_status(ctx.stage_dirs["sqi"], ctx.job_id, "sqi", True, started_at)
+    return ctx
