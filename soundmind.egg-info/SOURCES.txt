@@ -1,7 +1,11 @@
 README.md
 pyproject.toml
 soundmind/__init__.py
+soundmind/__main__.py
+soundmind/cli.py
+soundmind/jobs.py
 soundmind/pipeline.py
+soundmind/status_init.py
 soundmind.egg-info/PKG-INFO
 soundmind.egg-info/SOURCES.txt
 soundmind.egg-info/dependency_links.txt
