@@ -29,9 +29,10 @@ def run_cli(*args: str, cwd: str | None = None) -> subprocess.CompletedProcess:
 
 @pytest.fixture
 def input_file(tmp_path):
-    """Create a fake input file for testing."""
+    """Create a valid test WAV file for testing."""
+    from tests.conftest import create_test_wav
     input_path = tmp_path / "test_input.wav"
-    input_path.write_bytes(b"fake wav content for testing")
+    create_test_wav(input_path, duration_sec=0.5)  # Short for faster tests
     return input_path
 
 

@@ -15,10 +15,16 @@ Invariants:
 Commit 5: Implements Stage class with contract.
     - Requires: audio/original
     - Produces: audio/speech, audio/residual
+
+Commit 6: Real energy-based RMS masking.
+    - speech.wav = input * mask
+    - residual.wav = input - speech
+    - Same length, sample rate, deterministic output
 """
 
-import shutil
+import numpy as np
 
+from soundmind import audio
 from soundmind.context import JobContext
 from soundmind.contracts import Stage, StageContract, StageContext
 from soundmind.stages.base import (
@@ -44,7 +50,7 @@ CONTRACT = StageContract(
 
 
 # =============================================================================
-# SeparationStage Class (Commit 5)
+# SeparationStage Class (Commit 6 — Real Implementation)
 # =============================================================================
 
 
@@ -52,8 +58,9 @@ class SeparationStage(Stage):
     """
     Stage B: Separate audio into speech and residual stems.
     
-    Creates stub stems by copying input audio.
-    Real separation will replace in future commits.
+    Commit 6: Energy-based RMS masking.
+        - speech = input * mask
+        - residual = input - speech
     """
     
     contract = CONTRACT
@@ -74,26 +81,38 @@ class SeparationStage(Stage):
         # Get input artifact for status
         input_artifacts = [a for a in ctx.artifacts if a.role == "audio/original"]
         
-        # Create stub stems by copying input
+        # Load and normalize input audio
+        samples, sr = audio.read_wav(ctx.input_audio)
+        samples = audio.normalize_audio(samples, sr)
+        
+        # Build speech mask using energy-based RMS thresholding
+        mask = audio.build_speech_mask(samples, sr=audio.CANONICAL_SAMPLE_RATE)
+        
+        # Create stems
+        speech = samples * mask
+        residual = samples - speech  # = samples * (1 - mask)
+        
+        # Prepare output paths
         speech_path = ensure_artifact_path(stage_dir, "stems/speech.wav")
         residual_path = ensure_artifact_path(stage_dir, "stems/residual.wav")
         
-        shutil.copy2(ctx.input_audio, speech_path)
-        shutil.copy2(ctx.input_audio, residual_path)
+        # Write with hard clipping (already handled in write_wav)
+        audio.write_wav(speech_path, speech)
+        audio.write_wav(residual_path, residual)
         
-        # Build artifact refs with new role format
+        # Build artifact refs
         artifacts = [
             build_artifact_ref(
                 path="separation/stems/speech.wav",
                 artifact_type="audio/wav",
                 role="audio/speech",
-                description="Stub speech stem (copied from input)",
+                description="Speech stem (energy-based RMS mask)",
             ),
             build_artifact_ref(
                 path="separation/stems/residual.wav",
                 artifact_type="audio/wav",
                 role="audio/residual",
-                description="Stub residual stem (copied from input)",
+                description="Residual stem (input - speech)",
             ),
         ]
         
@@ -117,37 +136,49 @@ class SeparationStage(Stage):
 
 def run(ctx: JobContext) -> JobContext:
     """
-    Stage B: Create stub separation stems.
+    Stage B: Separate audio into speech and residual stems.
     
-    TEMPORARY ADAPTER: Delegates to SeparationStage.run() internally.
-    This adapter exists only to avoid breaking current pipeline wiring.
+    TEMPORARY ADAPTER: Maintains backward compatibility with pipeline.
     
-    Copies input audio to stems/speech.wav and stems/residual.wav.
-    These are stubs — real separation will replace in future commits.
+    Commit 6: Real energy-based separation.
+        - speech = input * mask
+        - residual = input - speech
     """
     started_at = now_iso()
     stage_dir = ctx.stage_dirs["separation"]
     
-    # Create stub stems by copying input
+    # Load and normalize input audio
+    samples, sr = audio.read_wav(ctx.input_wav_path)
+    samples = audio.normalize_audio(samples, sr)
+    
+    # Build speech mask using energy-based RMS thresholding
+    mask = audio.build_speech_mask(samples, sr=audio.CANONICAL_SAMPLE_RATE)
+    
+    # Create stems
+    speech = samples * mask
+    residual = samples - speech
+    
+    # Prepare output paths
     speech_path = ensure_artifact_path(stage_dir, "stems/speech.wav")
     residual_path = ensure_artifact_path(stage_dir, "stems/residual.wav")
     
-    shutil.copy2(ctx.input_wav_path, speech_path)
-    shutil.copy2(ctx.input_wav_path, residual_path)
+    # Write WAVs
+    audio.write_wav(speech_path, speech)
+    audio.write_wav(residual_path, residual)
     
-    # Build artifact refs with new role format (Commit 5)
+    # Build artifact refs
     artifacts = [
         build_artifact_ref(
             path="separation/stems/speech.wav",
             artifact_type="audio/wav",
             role="audio/speech",
-            description="Stub speech stem (copied from input)",
+            description="Speech stem (energy-based RMS mask)",
         ),
         build_artifact_ref(
             path="separation/stems/residual.wav",
             artifact_type="audio/wav",
             role="audio/residual",
-            description="Stub residual stem (copied from input)",
+            description="Residual stem (input - speech)",
         ),
     ]
     

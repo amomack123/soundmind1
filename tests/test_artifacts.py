@@ -1,102 +1,107 @@
 """
-SoundMind v1 Artifact Tests - Commit 4
+SoundMind v1 Artifact Tests - Commit 4/5/6
 
 Verifies artifact plumbing:
 - Artifact files exist after pipeline run
 - artifacts[] populated in stage status.json
 - Rollup aggregates artifacts in stage order
 - Job-level status.json contains artifacts
+
+Commit 6: Updated to verify real content (not stubs).
 """
 
 import json
-import shutil
-import subprocess
-import sys
-import tempfile
 from pathlib import Path
 
 import pytest
 
-
-def run_cli(*args: str) -> subprocess.CompletedProcess:
-    """Run soundmind CLI as subprocess."""
-    return subprocess.run(
-        [sys.executable, "-m", "soundmind", *args],
-        capture_output=True,
-        text=True,
-    )
-
-
-@pytest.fixture
-def pipeline_result(tmp_path):
-    """Run pipeline and return paths."""
-    # Create a fake input file
-    input_file = tmp_path / "test_input.wav"
-    input_file.write_bytes(b"fake wav content for testing")
-    
-    job_id = "artifact-test-job"
-    jobs_root = tmp_path / "jobs"
-    
-    result = run_cli(
-        "run",
-        "--input", str(input_file),
-        "--jobs-root", str(jobs_root),
-        "--job-id", job_id,
-    )
-    
-    assert result.returncode == 0, f"Pipeline failed: {result.stderr}"
-    
-    return {
-        "job_dir": jobs_root / job_id,
-        "result": result,
-    }
+from tests.conftest import create_test_wav
 
 
 class TestArtifactFilesExist:
     """Verify artifact files are created."""
 
     def test_separation_stems_exist(self, pipeline_result):
-        """Separation creates speech.wav and residual.wav stubs."""
+        """Separation creates speech.wav and residual.wav."""
         job_dir = pipeline_result["job_dir"]
         assert (job_dir / "separation" / "stems" / "speech.wav").exists()
         assert (job_dir / "separation" / "stems" / "residual.wav").exists()
 
     def test_sqi_json_exists(self, pipeline_result):
-        """SQI creates sqi.json stub."""
+        """SQI creates sqi.json."""
         job_dir = pipeline_result["job_dir"]
         assert (job_dir / "sqi" / "sqi.json").exists()
 
     def test_diarization_json_exists(self, pipeline_result):
-        """Diarization creates diarization.json stub."""
+        """Diarization creates diarization.json."""
         job_dir = pipeline_result["job_dir"]
         assert (job_dir / "diarization" / "diarization.json").exists()
 
     def test_events_json_exists(self, pipeline_result):
-        """Events creates events.json stub."""
+        """Events creates events.json."""
         job_dir = pipeline_result["job_dir"]
         assert (job_dir / "events" / "events.json").exists()
 
 
-class TestStubContent:
-    """Verify stub content is deterministic."""
+class TestRealContent:
+    """Verify real content (Commit 6 replaces stubs)."""
 
-    def test_sqi_stub_content(self, pipeline_result):
-        """SQI stub has expected content."""
+    def test_sqi_has_metrics(self, pipeline_result):
+        """SQI has metrics with locked keys."""
         job_dir = pipeline_result["job_dir"]
         sqi = json.loads((job_dir / "sqi" / "sqi.json").read_text())
-        assert sqi == {"metrics": {}}
+        
+        assert "metrics" in sqi
+        metrics = sqi["metrics"]
+        
+        # Locked metric set
+        expected_keys = {
+            "duration_sec",
+            "sample_rate_hz",
+            "num_samples",
+            "rms",
+            "peak_abs",
+            "zero_crossing_rate",
+            "speech_ratio",
+        }
+        assert set(metrics.keys()) == expected_keys
+        
+        # All values are finite
+        for key, value in metrics.items():
+            assert isinstance(value, (int, float))
+            if isinstance(value, float):
+                import math
+                assert math.isfinite(value), f"{key} is not finite"
 
-    def test_diarization_stub_content(self, pipeline_result):
-        """Diarization stub has expected content."""
+    def test_diarization_structure(self, pipeline_result):
+        """Diarization has proper structure."""
         job_dir = pipeline_result["job_dir"]
         diarization = json.loads((job_dir / "diarization" / "diarization.json").read_text())
-        assert diarization == {"sample_rate": 16000, "speakers": []}
+        
+        assert diarization["sample_rate"] == 16000
+        assert "speakers" in diarization
+        
+        # If there are speakers, verify structure
+        for speaker in diarization["speakers"]:
+            assert speaker["speaker_id"] == "SPEAKER_00"
+            assert "segments" in speaker
+            for seg in speaker["segments"]:
+                assert "start_s" in seg
+                assert "end_s" in seg
 
-    def test_events_stub_content(self, pipeline_result):
-        """Events stub has expected content."""
+    def test_events_structure(self, pipeline_result):
+        """Events has proper structure."""
         job_dir = pipeline_result["job_dir"]
         events = json.loads((job_dir / "events" / "events.json").read_text())
-        assert events == {"events": []}
+        
+        assert "events" in events
+        
+        # Each event has required fields
+        for event in events["events"]:
+            assert event["type"] == "impulsive_sound"
+            assert "start_s" in event
+            assert "end_s" in event
+            assert event["confidence"] == 1.0
 
 
 class TestArtifactRefs:

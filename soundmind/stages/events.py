@@ -24,8 +24,15 @@ Invariants:
 Commit 5: Implements Stage class with contract.
     - Requires: audio/residual
     - Produces: metadata/events
+
+Commit 6: Impulse detection in non-speech regions.
+    - Only "impulsive_sound" type (no spectral analysis for tonal/vehicle)
+    - confidence: 1.0 (deterministic detection = fixed value per schema)
 """
 
+import numpy as np
+
+from soundmind import audio
 from soundmind.context import JobContext
 from soundmind.contracts import Stage, StageContract, StageContext
 from soundmind.stages.base import (
@@ -50,12 +57,8 @@ CONTRACT = StageContract(
 )
 
 
-# Deterministic stub content (frozen)
-STUB_EVENTS = {"events": []}
-
-
 # =============================================================================
-# EventsStage Class (Commit 5)
+# EventsStage Class (Commit 6 — Real Implementation)
 # =============================================================================
 
 
@@ -63,8 +66,9 @@ class EventsStage(Stage):
     """
     Stage E: Detect acoustic event candidates.
     
-    Creates stub events.json with empty events array.
-    Real event detection will replace in future commits.
+    Commit 6: Impulse detection in non-speech regions.
+        - Only detects impulsive_sound (no spectral for tonal/vehicle)
+        - confidence: 1.0 (schema-required, deterministic)
     """
     
     contract = CONTRACT
@@ -85,15 +89,37 @@ class EventsStage(Stage):
         # Get input artifact for status
         input_artifacts = [a for a in ctx.artifacts if a.role == "audio/residual"]
         
-        # Write stub JSON
-        artifact_path = write_artifact(stage_dir, "events.json", STUB_EVENTS)
+        # Load residual stem (non-speech audio)
+        residual_path = ctx.workspace / "separation" / "stems" / "residual.wav"
+        samples, sr = audio.read_wav(residual_path)
+        samples = audio.normalize_audio(samples, sr)
         
-        # Build artifact ref with new role format
+        # Build non-speech mask (inverse of speech mask)
+        speech_mask = audio.build_speech_mask(samples, sr=audio.CANONICAL_SAMPLE_RATE)
+        non_speech_mask = 1.0 - speech_mask
+        
+        # Detect impulses in non-speech regions
+        impulses = audio.detect_impulses(samples, non_speech_mask)
+        
+        # Build events output with schema-compliant structure
+        events_data = {
+            "events": [{
+                "type": "impulsive_sound",
+                "start_s": e["start"],
+                "end_s": e["end"],
+                "confidence": 1.0,  # Schema-required, deterministic
+            } for e in impulses]
+        }
+        
+        # Write JSON
+        artifact_path = write_artifact(stage_dir, "events.json", events_data)
+        
+        # Build artifact ref
         artifact = build_artifact_ref(
             path=artifact_path,
             artifact_type="application/json",
             role="metadata/events",
-            description="Stub acoustic event candidates",
+            description="Impulse events detected in non-speech regions",
         )
         
         # Write enhanced status
@@ -116,27 +142,47 @@ class EventsStage(Stage):
 
 def run(ctx: JobContext) -> JobContext:
     """
-    Stage E: Create stub events output.
+    Stage E: Detect acoustic event candidates.
     
-    TEMPORARY ADAPTER: Delegates to EventsStage.run() internally.
-    This adapter exists only to avoid breaking current pipeline wiring.
+    TEMPORARY ADAPTER: Maintains backward compatibility with pipeline.
     
-    Writes events.json with empty events array.
-    Real event detection will replace in future commits.
+    Commit 6: Impulse detection in non-speech regions.
     """
     started_at = now_iso()
     stage_dir = ctx.stage_dirs["events"]
     
-    # Write stub JSON
-    artifact_path = write_artifact(stage_dir, "events.json", STUB_EVENTS)
+    # Load residual stem
+    residual_path = ctx.stage_dirs["separation"] / "stems" / "residual.wav"
+    samples, sr = audio.read_wav(residual_path)
+    samples = audio.normalize_audio(samples, sr)
     
-    # Build artifact ref with new role format (Commit 5)
+    # Build non-speech mask
+    speech_mask = audio.build_speech_mask(samples, sr=audio.CANONICAL_SAMPLE_RATE)
+    non_speech_mask = 1.0 - speech_mask
+    
+    # Detect impulses
+    impulses = audio.detect_impulses(samples, non_speech_mask)
+    
+    # Build events output
+    events_data = {
+        "events": [{
+            "type": "impulsive_sound",
+            "start_s": e["start"],
+            "end_s": e["end"],
+            "confidence": 1.0,
+        } for e in impulses]
+    }
+    
+    # Write JSON
+    artifact_path = write_artifact(stage_dir, "events.json", events_data)
+    
+    # Build artifact ref
     artifacts = [
         build_artifact_ref(
             path=artifact_path,
             artifact_type="application/json",
             role="metadata/events",
-            description="Stub acoustic event candidates",
+            description="Impulse events detected in non-speech regions",
         ),
     ]
     

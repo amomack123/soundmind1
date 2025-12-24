@@ -314,8 +314,9 @@ class TestStageStatusSchema:
     @pytest.fixture
     def pipeline_result(self, tmp_path):
         """Run pipeline and return job directory."""
+        from tests.conftest import create_test_wav
         input_file = tmp_path / "test_input.wav"
-        input_file.write_bytes(b"fake wav content for testing")
+        create_test_wav(input_file, duration_sec=0.5)
         
         job_id = "status-schema-test"
         jobs_root = tmp_path / "jobs"
@@ -359,18 +360,20 @@ class TestDeterministicOrdering:
     @pytest.fixture
     def pipeline_result(self, tmp_path):
         """Run pipeline and return job directory."""
+        from tests.conftest import create_test_wav
         input_file = tmp_path / "test_input.wav"
-        input_file.write_bytes(b"fake wav content")
+        create_test_wav(input_file, duration_sec=0.5)
         
         job_id = "ordering-test"
         jobs_root = tmp_path / "jobs"
         
-        run_cli(
+        result = run_cli(
             "run",
             "--input", str(input_file),
             "--jobs-root", str(jobs_root),
             "--job-id", job_id,
         )
+        assert result.returncode == 0, f"Pipeline failed: {result.stderr}"
         return jobs_root / job_id
 
     def test_rollup_artifacts_in_stage_order(self, pipeline_result):

@@ -5,9 +5,14 @@ Summary: SoundMind v1 - Forensic Audio Processing Pipeline
 License: Proprietary
 Requires-Python: >=3.10
 Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: soundfile>=0.12.0
+Requires-Dist: scipy>=1.11.0
 Provides-Extra: dev
 Requires-Dist: pytest>=7.0; extra == "dev"
 Requires-Dist: jsonschema>=4.0; extra == "dev"
+Requires-Dist: black>=24.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
 
 # SoundMind v1
 
