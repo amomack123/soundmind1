@@ -15,16 +15,46 @@ Invariants:
     - Metrics are objective, non-semantic
     - Same input + same version = identical metrics
 
-Commit 3: No-op stub, writes status.json (no DSP).
+Commit 4: Creates stub sqi.json, populates artifacts[].
 """
 
 from soundmind.context import JobContext
-from soundmind.stages.base import write_stage_status
+from soundmind.stages.base import (
+    build_artifact_ref,
+    write_artifact,
+    write_stage_status,
+)
 from soundmind.utils import now_iso
 
 
+# Deterministic stub content (frozen)
+STUB_SQI = {"metrics": {}}
+
+
 def run(ctx: JobContext) -> JobContext:
-    """Stage C: No-op SQI stub."""
+    """
+    Stage C: Create stub SQI output.
+    
+    Writes sqi.json with empty metrics.
+    Real metrics computation will replace in future commits.
+    """
     started_at = now_iso()
-    write_stage_status(ctx.stage_dirs["sqi"], ctx.job_id, "sqi", True, started_at)
+    stage_dir = ctx.stage_dirs["sqi"]
+    
+    # Write stub JSON
+    artifact_path = write_artifact(stage_dir, "sqi.json", STUB_SQI)
+    
+    # Build artifact ref
+    artifacts = [
+        build_artifact_ref(
+            path=artifact_path,
+            artifact_type="application/json",
+            role="sqi",
+            description="Stub signal quality indicators",
+        ),
+    ]
+    
+    write_stage_status(
+        stage_dir, ctx.job_id, "sqi", True, started_at, artifacts=artifacts
+    )
     return ctx

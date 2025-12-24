@@ -18,7 +18,7 @@ Invariants:
     - No additional inference or transformation
     - ONLY stage allowed to read other stages' status files
 
-Commit 3: Reads prior statuses, checks for missing stages, writes status.json.
+Commit 4: Aggregates artifacts from all stages verbatim.
 """
 
 import json
@@ -28,20 +28,17 @@ from soundmind.stages.base import write_stage_status
 from soundmind.utils import now_iso
 
 
-# Expected stages that must have run before rollup
+# Expected stages that must have run before rollup (in order)
 EXPECTED_STAGES = ["ingest", "separation", "sqi", "diarization", "events"]
 
 
 def run(ctx: JobContext) -> JobContext:
     """
-    Stage F: Read other statuses, write rollup.
+    Stage F: Read other statuses, aggregate artifacts, write rollup.
     
     Only stage allowed to read other stages' status files.
-    Explicitly checks for missing stages (not silent).
-    
-    Note:
-        Rollup never raises StageFailure; it records aggregation results only.
-        This is intentional — rollup is an observer, not a validator.
+    Aggregates artifacts[] from all stages verbatim in stage order.
+    Does NOT rewrite or normalize artifact refs.
     """
     started_at = now_iso()
     
@@ -62,6 +59,21 @@ def run(ctx: JobContext) -> JobContext:
         # All stages must have succeeded
         all_success = all(s.get("success", False) for s in stage_statuses.values())
     
+    # Aggregate artifacts from all stages in stage order
+    # Preserve per-stage order, do NOT rewrite refs
+    aggregated_artifacts = []
+    for stage_name in EXPECTED_STAGES:
+        if stage_name in stage_statuses:
+            stage_artifacts = stage_statuses[stage_name].get("artifacts", [])
+            aggregated_artifacts.extend(stage_artifacts)
+    
     # Rollup records result but never raises — it's an observer
-    write_stage_status(ctx.stage_dirs["rollup"], ctx.job_id, "rollup", all_success, started_at)
+    write_stage_status(
+        ctx.stage_dirs["rollup"],
+        ctx.job_id,
+        "rollup",
+        all_success,
+        started_at,
+        artifacts=aggregated_artifacts,
+    )
     return ctx

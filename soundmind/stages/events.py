@@ -21,16 +21,46 @@ Invariants:
     - Confidence in range [0.0, 1.0]
     - Same input + same version = identical output
 
-Commit 3: No-op stub, writes status.json (no ML).
+Commit 4: Creates stub events.json, populates artifacts[].
 """
 
 from soundmind.context import JobContext
-from soundmind.stages.base import write_stage_status
+from soundmind.stages.base import (
+    build_artifact_ref,
+    write_artifact,
+    write_stage_status,
+)
 from soundmind.utils import now_iso
 
 
+# Deterministic stub content (frozen)
+STUB_EVENTS = {"events": []}
+
+
 def run(ctx: JobContext) -> JobContext:
-    """Stage E: No-op events stub."""
+    """
+    Stage E: Create stub events output.
+    
+    Writes events.json with empty events array.
+    Real event detection will replace in future commits.
+    """
     started_at = now_iso()
-    write_stage_status(ctx.stage_dirs["events"], ctx.job_id, "events", True, started_at)
+    stage_dir = ctx.stage_dirs["events"]
+    
+    # Write stub JSON
+    artifact_path = write_artifact(stage_dir, "events.json", STUB_EVENTS)
+    
+    # Build artifact ref
+    artifacts = [
+        build_artifact_ref(
+            path=artifact_path,
+            artifact_type="application/json",
+            role="events",
+            description="Stub acoustic event candidates",
+        ),
+    ]
+    
+    write_stage_status(
+        stage_dir, ctx.job_id, "events", True, started_at, artifacts=artifacts
+    )
     return ctx
