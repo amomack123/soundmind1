@@ -432,12 +432,12 @@ class TestContractDefinitions:
         assert CONTRACT.produces == frozenset({"metadata/sqi"})
 
     def test_diarization_contract(self):
-        """Diarization contract: requires={audio/speech}, produces={metadata/diarization}."""
+        """Diarization contract: requires={audio/speech}, produces={metadata/diarization, audio/diarized_speaker}."""
         from soundmind.stages.diarization import CONTRACT
         
         assert CONTRACT.name == "diarization"
         assert CONTRACT.requires == frozenset({"audio/speech"})
-        assert CONTRACT.produces == frozenset({"metadata/diarization"})
+        assert CONTRACT.produces == frozenset({"metadata/diarization", "audio/diarized_speaker"})
 
     def test_events_contract(self):
         """Events contract: requires={audio/residual}, produces={metadata/events}."""

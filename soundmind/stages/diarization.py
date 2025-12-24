@@ -4,7 +4,7 @@ Stage D: Diarization
 Responsibilities:
     - Identify distinct speakers in the speech track
     - Output speaker segments with timestamps (seconds, float)
-    - Generate per-speaker audio files
+    - Generate per-speaker audio files (Commit 8)
 
 Output schema: schemas/diarization.schema.json
     - sample_rate: integer
@@ -27,6 +27,12 @@ Commit 7: Deterministic diarization semantics.
     - One segment per contiguous speech run >= 0.20s
     - NO merging, NO smoothing, NO heuristics
     - Times rounded to 6 decimals at write-time
+
+Commit 8: Per-speaker audio materialization.
+    - Produces per_speaker/SPEAKER_00.wav
+    - Pure projection: consumes semantics, does not modify them
+    - Floor-based integer sample indexing
+    - No amplitude normalization or dtype conversion
 """
 
 import numpy as np
@@ -51,7 +57,7 @@ from soundmind.utils import now_iso
 CONTRACT = StageContract(
     name="diarization",
     requires=frozenset({"audio/speech"}),
-    produces=frozenset({"metadata/diarization"}),
+    produces=frozenset({"metadata/diarization", "audio/diarized_speaker"}),
     version="1.0.0",
 )
 
@@ -145,7 +151,7 @@ class DiarizationStage(Stage):
             ctx: Immutable execution context
         
         Returns:
-            List containing single metadata/diarization artifact reference.
+            List of artifact references (metadata/diarization + audio/diarized_speaker if segments exist).
         """
         start_time = now_iso()
         stage_dir = ctx.workspace / "diarization"
@@ -178,13 +184,37 @@ class DiarizationStage(Stage):
         # Write JSON
         artifact_path = write_artifact(stage_dir, "diarization.json", diarization)
         
-        # Build artifact ref
-        artifact = build_artifact_ref(
-            path=artifact_path,
-            artifact_type="application/json",
-            role="metadata/diarization",
-            description="Energy-based speaker segmentation (single pseudo-speaker)",
-        )
+        # Build artifact ref for JSON
+        artifacts = [
+            build_artifact_ref(
+                path=artifact_path,
+                artifact_type="application/json",
+                role="metadata/diarization",
+                description="Energy-based speaker segmentation (single pseudo-speaker)",
+            )
+        ]
+        
+        # Commit 8: Generate per-speaker WAV (only if segments exist)
+        if segments:
+            per_speaker_dir = stage_dir / "per_speaker"
+            per_speaker_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Extract and concatenate segments (floor-based integer indexing)
+            speaker_samples = audio.extract_and_concatenate(samples, segments, sr)
+            
+            # Write speaker WAV (deterministic, bit-exact)
+            speaker_wav_path = per_speaker_dir / f"{SPEAKER_ID}.wav"
+            audio.write_wav(speaker_wav_path, speaker_samples, sr)
+            
+            # Build artifact ref for speaker WAV
+            artifacts.append(
+                build_artifact_ref(
+                    path=f"diarization/per_speaker/{SPEAKER_ID}.wav",
+                    artifact_type="audio/wav",
+                    role="audio/diarized_speaker",
+                    description=f"Concatenated speech for {SPEAKER_ID}",
+                )
+            )
         
         # Write enhanced status
         write_stage_status_v2(
@@ -193,10 +223,10 @@ class DiarizationStage(Stage):
             stage_version=self.contract.version,
             start_time=start_time,
             input_artifacts=list(input_artifacts),
-            output_artifacts=[artifact],
+            output_artifacts=artifacts,
         )
         
-        return [artifact]
+        return artifacts
 
 
 # =============================================================================
@@ -211,6 +241,7 @@ def run(ctx: JobContext) -> JobContext:
     TEMPORARY ADAPTER: Maintains backward compatibility with pipeline.
     
     Commit 7: Deterministic diarization semantics.
+    Commit 8: Per-speaker audio materialization.
     """
     started_at = now_iso()
     stage_dir = ctx.stage_dirs["diarization"]
@@ -240,7 +271,7 @@ def run(ctx: JobContext) -> JobContext:
     # Write JSON
     artifact_path = write_artifact(stage_dir, "diarization.json", diarization)
     
-    # Build artifact ref
+    # Build artifact refs
     artifacts = [
         build_artifact_ref(
             path=artifact_path,
@@ -249,6 +280,28 @@ def run(ctx: JobContext) -> JobContext:
             description="Energy-based speaker segmentation (single pseudo-speaker)",
         ),
     ]
+    
+    # Commit 8: Generate per-speaker WAV (only if segments exist)
+    if segments:
+        per_speaker_dir = stage_dir / "per_speaker"
+        per_speaker_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Extract and concatenate segments (floor-based integer indexing)
+        speaker_samples = audio.extract_and_concatenate(samples, segments, sr)
+        
+        # Write speaker WAV (deterministic, bit-exact)
+        speaker_wav_path = per_speaker_dir / f"{SPEAKER_ID}.wav"
+        audio.write_wav(speaker_wav_path, speaker_samples, sr)
+        
+        # Build artifact ref for speaker WAV
+        artifacts.append(
+            build_artifact_ref(
+                path=f"diarization/per_speaker/{SPEAKER_ID}.wav",
+                artifact_type="audio/wav",
+                role="audio/diarized_speaker",
+                description=f"Concatenated speech for {SPEAKER_ID}",
+            )
+        )
     
     write_stage_status(
         stage_dir, ctx.job_id, "diarization", True, started_at, artifacts=artifacts

@@ -403,6 +403,55 @@ def regions_to_time_segments(
 
 
 # =============================================================================
+# Speaker Audio Extraction (Commit 8)
+# =============================================================================
+
+
+def extract_and_concatenate(
+    samples: np.ndarray,
+    segments: list[tuple[float, float]],
+    sr: int,
+) -> np.ndarray:
+    """
+    Extract and concatenate sample regions based on time segments.
+    
+    Args:
+        samples: Source audio samples
+        segments: List of (start_sec, end_sec) tuples, ordered by start time
+        sr: Sample rate (must match source; no default to enforce explicit passing)
+    
+    Returns:
+        Concatenated samples from all segments
+    
+    Note:
+        - Time-to-sample: start_idx = int(start_sec * sr), end_idx = int(end_sec * sr) (floor)
+        - Segments must be in temporal order (Commit 8 does NOT re-order)
+        - Returns empty array if no segments
+        - No amplitude normalization or dtype conversion
+    """
+    if not segments:
+        return np.array([], dtype=np.float32)
+    
+    chunks = []
+    for start_sec, end_sec in segments:
+        # Floor-based integer indexing (locked per Commit 8)
+        start_idx = int(start_sec * sr)
+        end_idx = int(end_sec * sr)
+        
+        # Clamp to valid range
+        start_idx = max(0, start_idx)
+        end_idx = min(len(samples), end_idx)
+        
+        if end_idx > start_idx:
+            chunks.append(samples[start_idx:end_idx])
+    
+    if not chunks:
+        return np.array([], dtype=np.float32)
+    
+    return np.concatenate(chunks)
+
+
+# =============================================================================
 # Impulse Detection (Events Stage)
 # =============================================================================
 
