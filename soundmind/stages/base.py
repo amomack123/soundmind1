@@ -104,3 +104,96 @@ def write_stage_status(
     
     status_path = stage_dir / "status.json"
     status_path.write_text(json.dumps(status, indent=2, sort_keys=True) + "\n")
+
+
+# =============================================================================
+# Artifact Helpers (Commit 4)
+# =============================================================================
+
+
+def ensure_artifact_path(stage_dir: Path, rel_path: str) -> Path:
+    """
+    Ensure parent directories exist for an artifact path.
+    
+    Args:
+        stage_dir: Path to stage directory (e.g., jobs/<job_id>/separation)
+        rel_path: Relative path within stage (e.g., "stems/speech.wav")
+    
+    Returns:
+        Absolute path to the artifact file.
+    
+    Note:
+        Creates parent directories if they don't exist.
+        Does NOT create the file itself.
+    """
+    artifact_path = stage_dir / rel_path
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    return artifact_path
+
+
+def write_artifact(
+    stage_dir: Path,
+    rel_path: str,
+    content: bytes | dict | str,
+    binary: bool = False,
+) -> str:
+    """
+    Write content to an artifact file.
+    
+    Args:
+        stage_dir: Path to stage directory
+        rel_path: Relative path within stage
+        content: Content to write
+        binary: If True, write content as bytes.
+                If False, JSON-serialize dict or write str directly.
+    
+    Returns:
+        Relative path from job root (e.g., "separation/stems/speech.wav")
+    
+    Note:
+        Creates parent directories if needed.
+    """
+    artifact_path = ensure_artifact_path(stage_dir, rel_path)
+    
+    if binary:
+        artifact_path.write_bytes(content)
+    else:
+        if isinstance(content, dict):
+            artifact_path.write_text(
+                json.dumps(content, indent=2, sort_keys=True) + "\n"
+            )
+        else:
+            artifact_path.write_text(content)
+    
+    # Return relative path from job root: stage_name/rel_path
+    return f"{stage_dir.name}/{rel_path}"
+
+
+def build_artifact_ref(
+    path: str,
+    artifact_type: str,
+    role: str,
+    description: str,
+) -> dict:
+    """
+    Build a standardized artifact reference.
+    
+    Args:
+        path: Relative path from job root (e.g., "separation/stems/speech.wav")
+        artifact_type: MIME type (e.g., "audio/wav", "application/json")
+        role: Artifact role (e.g., "speech", "residual", "diarization")
+        description: Human-readable description
+    
+    Returns:
+        Frozen ArtifactRef dict with exactly four fields:
+        {path, type, role, description}
+    
+    Note:
+        This shape is FROZEN. No additional fields in Commit 4.
+    """
+    return {
+        "path": path,
+        "type": artifact_type,
+        "role": role,
+        "description": description,
+    }
