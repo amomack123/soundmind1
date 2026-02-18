@@ -32,6 +32,14 @@ Forensic audio processing pipeline.
 - Event candidates only run inside non_speech segments
 - Same input + same version = identical output
 
+### Events (Commit 9)
+
+- `events/events.json` is byte-identical across repeated runs for identical input
+- Events are non-speech-only: derived from `speech.wav` exact-zero semantics (non-zero sample = speech, exact zero = non-speech)
+- Timestamps (`start_s`, `end_s`) formatted to exactly 6 decimal places
+- Events sorted deterministically by `(start_s, end_s, type)`
+- Impulse candidates overlapping any speech region are discarded entirely
+
 ## Schema Validation
 
 ```bash
@@ -49,4 +57,5 @@ pytest tests/ -v
 
 ## Status
 
-**Commit 1**: Repository skeleton with frozen schemas and stubs. No implementation logic.
+**Commit 9**: Deterministic non-speech event materialization with locked tests.
+

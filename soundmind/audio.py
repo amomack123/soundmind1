@@ -73,6 +73,26 @@ def read_wav(path: Path) -> tuple[np.ndarray, int]:
     return samples, sr
 
 
+def read_wav_int16(path: Path) -> tuple[np.ndarray, int]:
+    """
+    Read WAV file and return raw PCM-16 integer samples.
+    
+    Args:
+        path: Path to WAV file (must be PCM-16 subtype)
+    
+    Returns:
+        Tuple of (samples as int16, sample_rate)
+    
+    Note:
+        Commit 9: Used for exact-zero speech/non-speech detection.
+        Integer comparison (== 0) is immune to floating-point
+        representation quirks that could arise from normalization.
+    """
+    samples, sr = sf.read(path, dtype="int16", always_2d=False)
+    return samples, sr
+
+
+
 def write_wav(path: Path, samples: np.ndarray, sample_rate: int = CANONICAL_SAMPLE_RATE) -> None:
     """
     Write samples to WAV file as PCM 16-bit.
